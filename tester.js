@@ -200,6 +200,107 @@ impressionId : the value of itineraries/l/impressionId returned in poll
 
 // });
 
+/*******Middleware*********/
+
+function getCityCode(cityName) {
+  return new Promise(function(resolve, reject) {
+    let airportCode = {
+      method: 'GET',
+      url: 'https://tripadvisor1.p.rapidapi.com/airports/search',
+      qs: {locale: 'en_US', query: cityName},
+      headers: {
+        'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
+        'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
+      }
+    };
+    request(airportCode, function(error, response, body) {
+      if(error)  reject(Error("getCityCode error"));
+      
+      resolve(JSON.parse(body));
+      
+  });
+ });
+}
+
+function startSession(flightDetails){
+  return new Promise(function(resolve, reject) {
+    let sessionStart = {
+      method : 'GET',
+      url : 'https://tripadvisor1.p.rapidapi.com/flights/create-session',
+      qs : {
+        currency : 'USD',
+        o1 : flightDetails.origin,
+        d1 : flightDetails.destination,
+        dd1 : '2020-06-05'
+      },
+      headers: {
+        'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
+        'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
+      }
+    }
+    
+    request(sessionStart, function(error, response, body) {
+        if(error) reject(Error("start session error"));
+        
+        resolve(JSON.parse(body));
+    });
+  });
+}
+
+function pollSession(flightData) {
+  return new Promise(function(resolve, reject){
+    let sessionPoll = {
+      method : 'GET',
+      url : 'https://tripadvisor1.p.rapidapi.com/flights/poll',
+      qs : {
+        currency : 'USD',
+        sid : flightData
+      },
+      headers: {
+        'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
+        'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
+      }
+    }
+    
+    request(sessionPoll, function(error, response, body) {
+        if(error) reject(Error('polling error'));
+        
+        resolve(JSON.parse(body));
+    })
+  });
+}
+
+function getURL(specificFlightInfo, currentId) {
+  return new Promise(function(resolve, reject){
+    let getBooking = {
+      method : 'GET',
+      url : 'https://tripadvisor1.p.rapidapi.com/flights/get-booking-url',
+      qs : {
+        Dest : specificFlightInfo.destination,
+        Orig : specificFlightInfo.origin,
+        searchId : specificFlightInfo.sid,
+        id : currentId,
+        searchHash : specificFlightInfo.sh
+      },
+      headers: {
+        'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
+        'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
+      }
+    }
+    
+    request(getBooking, function(error, response, body) {
+        if(error) reject(Error('Problem getting the links'));
+        
+        resolve(JSON.parse(body));
+    })
+  });
+}
+
+function sleep(ms) {
+  return new Promise(
+    resolve => setTimeout(resolve, ms)
+  );
+}
 
 
 app.get('/', function(req, res){
@@ -207,107 +308,61 @@ app.get('/', function(req, res){
 });
 
 app.get('/search', function(req, res){
+  var flightDetails = {};
   
-  var getDeparting = {
-    method: 'GET',
-    url: 'https://tripadvisor1.p.rapidapi.com/airports/search',
-    qs: {locale: 'en_US', query: req.query.starting},
-    headers: {
-      'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
-      'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
-    }
-  };
+  var cityOne = getCityCode(req.query.starting);
+  var cityTwo = getCityCode(req.query.ending);
   
-  var getLanding = {
-    method: 'GET',
-    url: 'https://tripadvisor1.p.rapidapi.com/airports/search',
-    qs: {locale: 'en_US', query: req.query.ending},
-    headers: {
-      'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
-      'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
-    }
-  };
-  
-  request(getDeparting, function(error, response, body){
-   
-    var departingBody = JSON.parse(body);
-    
-    request(getLanding, function(error, response, body) {
-        
-        var landingBody = JSON.parse(body);
-        
-        var endingLocation = landingBody[0].code;
-        var startingLocation = departingBody[0].code;
-        
-        var options = {
-          method: 'GET',
-          url: 'https://tripadvisor1.p.rapidapi.com/flights/create-session',
-          qs: {
-            currency: 'USD',
-            ta: '1',
-            d1: endingLocation,
-            o1: startingLocation,
-            dd1: '2020-05-01'
-          },
-          headers: {
-            'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
-            'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
-          }
-        };
-        
-        request(options, function (error, response, body) {
-        	if (error) throw new Error(error);
-        	var newBody = JSON.parse(body);
-        	
-        	var poll = {
-            method: 'GET',
-            url: 'https://tripadvisor1.p.rapidapi.com/flights/poll',
-            qs: {
-              currency: 'USD',
-              n: '15',
-              ns: "NON_STOP,ONE_STOP",
-              sid: newBody.search_params.sid
-            },
-            headers: {
-              'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
-              'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5',
-            },
-          };
+  Promise.all([cityOne, cityTwo])
+    .then(function(result){
+      if(result[0][0].display_sub_title.includes('All Airports')) {
+        flightDetails.origin = result[0][1].code;
+      } else {
+        flightDetails.origin = result[0][0].code;
+      }
+      
+      if(result[1][0].display_sub_title.includes('All Airports')) {
+        flightDetails.destination = result[1][1].code;
+      } else {
+        flightDetails.destination = result[1][0].code;
+      }
+      
+      startSession(flightDetails)
+        .then(function(result) {
+          flightDetails.sid = result.search_params.sid;
           
-          request(poll, function(error, response, body){
-            if(error) throw new Error(error);
-            
-            var poll_body = JSON.parse(body);
-            
-            
-            var url_request = {
-              method: 'GET',
-              url: 'https://tripadvisor1.p.rapidapi.com/flights/get-booking-url',
-              qs: {
-                searchHash: newBody.summary.sh,
-                Dest: endingLocation,
-                id: poll_body.itineraries[0].l[0].id,
-                Orig: startingLocation,
-                searchId: newBody.search_params.sid
-              },
-              headers: {
-                'x-rapidapi-host': 'tripadvisor1.p.rapidapi.com',
-                'x-rapidapi-key': 'ad1468446emshdc678975791152cp11a26fjsnc7d999beafe5'
-              }
-            };
-            
-            request(url_request, function(error, response, body) {
-                if(error) throw new Error(error);
+          pollSession(flightDetails.sid)
+            .then(function(result) {
+              flightDetails.sh = result.summary.sh;
+              
+              if(result.summary.p === -1){
+                res.send('no flights could be found');
+              } else {
+                var allFlights = [];
                 
-                var url_body = JSON.parse(body);
-                res.render('results', {url: url_body.partner_url});
-            });
-        
-          });
-        
-        });
-    });
-  });
+                result.itineraries.forEach(async (currentIt, index) => {
+                  if(index % 5 === 0)
+                    await sleep(1100);
+                  allFlights.push(getURL(flightDetails, currentIt.l[0].id));
+                });
+                
+                Promise.all(allFlights)
+                  .then(function(result) {console.log(result); res.render('home')})
+                  .catch(function(error) {throw error;});
+              }
+              
+            })
+            .catch(function(error) {throw error});
+        })
+        .catch(function(error) {throw error});
+          
+    })
+    .catch(function(result){throw result;});
+  
+  //var sessionStart = startSession(flightDetails);
+  
+
+  
 });
 
 app.listen(process.env.PORT || 3000, function(){

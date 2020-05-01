@@ -6,6 +6,8 @@
     </header>
     
     <body>
-        <a href='<%=url%>'><%=url%></a>
+        <% itr.forEach((url) => {
+            <a href='<%=url%>' target="_blank"><%=url%></a>
+        <% }) %>
     </body>
 </html>
